@@ -97,7 +97,7 @@ class PerceptronModel(Module):
         super(PerceptronModel, self).__init__()
         
         # *** BEGIN YOUR CODE HERE ***
-
+        self.w = Parameter(ones(1, dimensions))
         # *** END YOUR CODE HERE ***
 
     def get_weights(self):
@@ -117,7 +117,7 @@ class PerceptronModel(Module):
         The pytorch function `tensordot` may be helpful here.
         """
         # *** BEGIN YOUR CODE HERE ***
-
+        return tensordot(self.w, x, dims=([1], [1]))
         # *** END YOUR CODE HERE ***
 
     def get_prediction(self, x):
@@ -127,7 +127,10 @@ class PerceptronModel(Module):
         Returns: 1 or -1
         """
         # *** BEGIN YOUR CODE HERE ***
-
+        res = self.run(x)
+        if res.item() >= 0:
+            return 1
+        return -1
         # *** END YOUR CODE HERE ***
 
 
@@ -143,7 +146,17 @@ class PerceptronModel(Module):
         with no_grad():
             dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
             # *** BEGIN YOUR CODE HERE ***
-
+            errors_found = True
+            while errors_found:
+                errors_found = False
+                for b in dataloader:
+                    feat = b['x']
+                    lbl = b['label']
+                    
+                    if self.get_prediction(feat) != lbl.item():
+                        # update weights
+                        self.w += lbl.item() * feat
+                        errors_found = True
         # *** END YOUR CODE HERE ***
 
 
@@ -157,7 +170,9 @@ class RegressionModel(Module):
         super().__init__()
         # Initialize your model parameters here
         # *** BEGIN YOUR CODE HERE ***
-
+        self.l1 = Linear(1, 128)
+        self.l2 = Linear(128, 64)
+        self.l3 = Linear(64, 1)
         # *** END YOUR CODE HERE ***
 
 
@@ -171,14 +186,16 @@ class RegressionModel(Module):
             A node with shape (batch_size x 1) containing predicted y-values
         """
         # *** BEGIN YOUR CODE HERE ***
-
+        out1 = relu(self.l1(x))
+        out2 = relu(self.l2(out1))
+        return self.l3(out2)
         # *** END YOUR CODE HERE ***
 
     
     def get_loss(self, x, y):
         """
         Computes the loss for a batch of examples.
-
+ 
         Inputs:
             x: a node with shape (batch_size x 1)
             y: a node with shape (batch_size x 1), containing the true y-values
@@ -186,38 +203,58 @@ class RegressionModel(Module):
         Returns: a tensor of size 1 containing the loss
         """
         # *** BEGIN YOUR CODE HERE ***
-
+        preds = self.forward(x)
+        return mse_loss(preds, y)
         # *** END YOUR CODE HERE ***
-
+ 
     def train(self, dataset):
         """
         Trains the model.
-
+ 
         In order to create batches, create a DataLoader object and pass in `dataset` as well as your required 
         batch size. You can look at PerceptronModel as a guideline for how you should implement the DataLoader
-
+ 
         Each sample in the dataloader object will be in the form {'x': features, 'label': label} where label
         is the item we need to predict based off of its features.
-
+ 
         Inputs:
             dataset: a PyTorch dataset object containing data to be trained on
             
         """
         # *** BEGIN YOUR CODE HERE ***
-
+        opt = optim.Adam(self.parameters(), lr=0.005)
+        loader = DataLoader(dataset, batch_size=64, shuffle=True)
+ 
+        while True:
+            total_l = 0.0
+            steps = 0
+            for b in loader:
+                feat = b['x'].float()
+                target = b['label'].float()
+                
+                opt.zero_grad()
+                l = self.get_loss(feat, target)
+                l.backward()
+                opt.step()
+                
+                total_l += l.item()
+                steps += 1
+                
+            if (total_l / steps) <= 0.02:
+                break
         # *** END YOUR CODE HERE ***
-
-
+ 
+ 
 class DigitClassificationModel(Module):
     """
     A model for handwritten digit classification using the MNIST dataset.
-
+ 
     Each handwritten digit is a 28x28 pixel grayscale image, which is flattened
     into a 784-dimensional vector for the purposes of this model. Each entry in
     the vector is a floating point number between 0 and 1.
-
+ 
     The goal is to sort each digit into one of 10 classes (number 0 through 9).
-
+ 
     (See RegressionModel for more information about the APIs of different
     methods here. We recommend that you implement the RegressionModel before
     working on this part of the project.)
@@ -228,18 +265,20 @@ class DigitClassificationModel(Module):
         input_size = 28 * 28
         output_size = 10
         # *** BEGIN YOUR CODE HERE ***
-
+        self.layer1 = Linear(input_size, 256)
+        self.layer2 = Linear(256, 128)
+        self.layer3 = Linear(128, output_size)
         # *** END YOUR CODE HERE ***
-
-
+ 
+ 
     def run(self, x):
         """
         Runs the model for a batch of examples.
-
+ 
         Your model should predict a node with shape (batch_size x 10),
         containing scores. Higher scores correspond to greater probability of
         the image belonging to a particular class.
-
+ 
         Inputs:
             x: a tensor with shape (batch_size x 784)
         Output:
@@ -247,44 +286,62 @@ class DigitClassificationModel(Module):
                 (also called logits)
         """
         # *** BEGIN YOUR CODE HERE ***
-
+        a1 = relu(self.layer1(x))
+        a2 = relu(self.layer2(a1))
+        return self.layer3(a2)
         # *** END YOUR CODE HERE ***
-
-
+ 
+ 
     def get_loss(self, x, y):
         """
         Computes the loss for a batch of examples.
-
+ 
         The correct labels `y` are represented as a tensor with shape
         (batch_size x 10). Each row is a one-hot vector encoding the correct
         digit class (0-9).
-
+ 
         Inputs:
             x: a node with shape (batch_size x 784)
             y: a node with shape (batch_size x 10)
         Returns: a loss tensor
         """
         # *** BEGIN YOUR CODE HERE ***
-
+        scores = self.run(x)
+        idx_labels = y.argmax(dim=1)
+        return cross_entropy(scores, idx_labels)
         # *** END YOUR CODE HERE ***
-
-
+ 
+ 
     def train(self, dataset):
         """
         Trains the model.
-
+ 
         Continues training over epochs until the dataset's accuracy on the model
         (as computed by dataset.get_accuracy(self)) reaches at least eps (0.97).
         """
         # *** BEGIN YOUR CODE HERE ***
-
+        opt = optim.Adam(self.parameters(), lr=0.002)
+        loader = DataLoader(dataset, batch_size=128, shuffle=True)
+ 
+        while True:
+            for b in loader:
+                feat = b['x'].float()
+                target = b['label'].float()
+                
+                opt.zero_grad()
+                l = self.get_loss(feat, target)
+                l.backward()
+                opt.step()
+                
+            if dataset.get_validation_accuracy() >= 0.971:
+                break
         # *** END YOUR CODE HERE ***
-
-
+ 
+ 
 class LanguageIDModel(Module):
     """
     A model for language identification at a single-word granularity.
-
+ 
     (See RegressionModel for more information about the APIs of different
     methods here. We recommend that you implement the RegressionModel before
     working on this part of the project.)
@@ -298,17 +355,21 @@ class LanguageIDModel(Module):
         self.languages = ["English", "Spanish", "Finnish", "Dutch", "Polish"]
         super(LanguageIDModel, self).__init__()
         # *** BEGIN YOUR CODE HERE ***
-
+        dim = 300
+ 
+        self.Wx = Linear(self.num_chars, dim)
+        self.Wh = Linear(dim, dim)
+        self.output = Linear(dim, len(self.languages))
         # *** END YOUR CODE HERE ***
-
-
+ 
+ 
     def run(self, xs):
         """
         Runs the model for a batch of examples.
-
+ 
         Although words have different lengths, our data processing guarantees
         that within a single batch, all words will be of the same length (L).
-
+ 
         Here `xs` will be a list of length L. Each element of `xs` will be a
         tensor with shape (batch_size x self.num_chars), where every row in the
         array is a one-hot vector encoding of a character. For example, if we
@@ -317,13 +378,13 @@ class LanguageIDModel(Module):
         index 7 reflects the fact that "cat" is the last word in the batch, and
         the index 0 reflects the fact that the letter "a" is the inital (0th)
         letter of our combined alphabet for this task.
-
+ 
         Your model should use a Recurrent Neural Network to summarize the list
         `xs` into a single tensor of shape (batch_size x hidden_size), for your
         choice of hidden_size. It should then calculate a tensor of shape
         (batch_size x 5) containing scores, where higher scores correspond to
         greater probability of the word originating from a particular language.
-
+ 
         Inputs:
             xs: a list with L elements (one per character), where each element
                 is a node with shape (batch_size x self.num_chars)
@@ -332,18 +393,26 @@ class LanguageIDModel(Module):
                 (also called logits)
         """
         # *** BEGIN YOUR CODE HERE ***
-
+        h_state = None
+        
+        for char_vec in xs:
+            if h_state is None:
+                h_state = relu(self.Wx(char_vec))
+            else:
+                h_state = relu(self.Wx(char_vec) + self.Wh(h_state))
+                
+        return self.output(h_state)
         # *** END YOUR CODE HERE ***
-
+ 
     
     def get_loss(self, xs, y):
         """
         Computes the loss for a batch of examples.
-
+ 
         The correct labels `y` are represented as a node with shape
         (batch_size x 5). Each row is a one-hot vector encoding the correct
         language.
-
+ 
         Inputs:
             xs: a list with L elements (one per character), where each element
                 is a node with shape (batch_size x self.num_chars)
@@ -351,73 +420,107 @@ class LanguageIDModel(Module):
         Returns: a loss node
         """
         # *** BEGIN YOUR CODE HERE ***
-
+        preds = self.run(xs)
+        lbls = y.argmax(dim=1)
+        return cross_entropy(preds, lbls)
         # *** END YOUR CODE HERE ***
-
+ 
     def train(self, dataset):
         """
         Trains the model.
-
+ 
         Note that when you iterate through dataloader, each batch will returned as its own vector in the form
         (batch_size x length of word x self.num_chars). However, in order to run multiple samples at the same time,
         get_loss() and run() expect each batch to be in the form (length of word x batch_size x self.num_chars), meaning
         that you need to switch the first two dimensions of every batch. This can be done with the movedim() function 
         as follows:
-
+ 
         movedim(input_vector, initial_dimension_position, final_dimension_position)
-
+ 
         For more information, look at the pytorch documentation of torch.movedim()
         """
         # *** BEGIN YOUR CODE HERE ***
-
+        opt = optim.Adam(self.parameters(), lr=0.003)
+        loader = DataLoader(dataset, batch_size=32, shuffle=True)
+ 
+        while True:
+            for b in loader:
+                seq = movedim(b['x'].float(), 0, 1)
+                target = b['label'].float()
+                
+                opt.zero_grad()
+                l = self.get_loss(list(seq), target)
+                l.backward()
+                opt.step()
+ 
+            if dataset.get_validation_accuracy() >= 0.815:
+                break
         # *** END YOUR CODE HERE ***
-
-
+ 
+ 
 def Convolve(input: tensor, weight: tensor):
     """
     Acts as a convolution layer by applying a 2d convolution with the given inputs and weights.
     DO NOT import any pytorch methods to directly do this, the convolution must be done with only the functions
     already imported.
-
+ 
     There are multiple ways to complete this function. One possible solution would be to use 'tensordot'.
     If you would like to index a tensor, you can do it as such:
-
+ 
     tensor[y:y+height, x:x+width]
-
+ 
     This returns a subtensor who's first element is tensor[y,x] and has height 'height, and width 'width'
     """
     input_tensor_dimensions = input.shape
     weight_dimensions = weight.shape
     Output_Tensor = tensor(())
     # *** BEGIN YOUR CODE HERE ***
+    h_in, w_in = input_tensor_dimensions
+    h_w, w_w = weight_dimensions
+ 
+    h_out = h_in - h_w + 1
+    w_out = w_in - w_w + 1
+ 
+    out_rows = []
     
+    for r in range(h_out):
+        row_vals = []
+        for c in range(w_out):
+            window = input[r:r + h_w, c:c + w_w]
+            dot_val = tensordot(window, weight, dims=([0, 1], [0, 1]))
+            row_vals.append(dot_val.reshape(()))
+            
+        out_rows.append(stack(row_vals))
+        
+    Output_Tensor = stack(out_rows)
     # *** END YOUR CODE HERE ***
     return Output_Tensor
-
-
-
+ 
+ 
+ 
 class DigitConvolutionalModel(Module):
     """
     A model for handwritten digit classification using the MNIST dataset.
-
+ 
     This class is a convolutational model which has already been trained on MNIST.
     if Convolve() has been correctly implemented, this model should be able to achieve a high accuracy
     on the mnist dataset given the pretrained weights.
-
+ 
     Note that this class looks different from a standard pytorch model since we don't need to train it
     as it will be run on preset weights.
     """
-
+ 
     def __init__(self):
         # Initialize your model parameters here
         super().__init__()
         output_size = 10
-
+ 
         self.convolution_weights = Parameter(ones((3, 3)))
         # *** BEGIN YOUR CODE HERE ***
-
+        self.fc1 = Linear(26 * 26, 64)
+        self.fc2 = Linear(64, output_size)
         # *** END YOUR CODE HERE ***
-
+ 
     def run(self, x):
         return self(x)
  
@@ -430,72 +533,102 @@ class DigitConvolutionalModel(Module):
         x = stack(list(map(lambda sample: Convolve(sample, self.convolution_weights), x)))
         x = x.flatten(start_dim=1)
         # *** BEGIN YOUR CODE HERE ***
-
+        out1 = relu(self.fc1(x))
+        return self.fc2(out1)
         # *** END YOUR CODE HERE ***
-
-
+ 
+ 
     def get_loss(self, x, y):
         """
         Computes the loss for a batch of examples.
-
+ 
         The correct labels `y` are represented as a tensor with shape
         (batch_size x 10). Each row is a one-hot vector encoding the correct
         digit class (0-9).
-
+ 
         Inputs:
             x: a node with shape (batch_size x 784)
             y: a node with shape (batch_size x 10)
         Returns: a loss tensor
         """
         # *** BEGIN YOUR CODE HERE ***
-
+        preds = self.forward(x)
+        lbls = y.argmax(dim=1)
+        return cross_entropy(preds, lbls)
         # *** END YOUR CODE HERE ***
-
-
+ 
+ 
     def train(self, dataset):
         """
         Trains the model.
         """
         # *** BEGIN YOUR CODE HERE ***
-
+        opt = optim.Adam(self.parameters(), lr=0.005)
+        loader = DataLoader(dataset, batch_size=32, shuffle=True)
+ 
+        while True:
+            for b in loader:
+                feat = b['x'].float()
+                target = b['label'].float()
+                
+                opt.zero_grad()
+                l = self.get_loss(feat, target)
+                l.backward()
+                opt.step()
+                
+            if dataset.get_validation_accuracy() >= 0.805:
+                break
         # *** END YOUR CODE HERE ***
-
-
+ 
+ 
 class Attention(Module):
     def __init__(self, layer_size, block_size):
         super().__init__()
         """
         All the layers you should use are defined here.
-
+ 
         In order to pass the autograder, make sure each linear layer matches up with their corresponding matrix,
         ie: use self.k_layer to generate the K matrix.
         """
         self.k_layer = Linear(layer_size, layer_size)
         self.q_layer = Linear(layer_size, layer_size)
         self.v_layer = Linear(layer_size,layer_size)
-
+ 
         #Masking part of attention layer
         self.register_buffer("mask", torch.tril(torch.ones(block_size, block_size))
                                      .view(1, 1, block_size, block_size))
        
         self.layer_size = layer_size
-
-
+ 
+ 
     def forward(self, input):
         """
         Applies the attention mechanism to input. All necessary layers have 
         been defined in __init__()
-
+ 
         In order to apply the causal mask to a given matrix M, you should update
         it as such:
     
         M = M.masked_fill(self.mask[:,:,:T,:T] == 0, float('-inf'))[0]
-
+ 
         For the softmax activation, it should be applied to the last dimension of the input,
         Take a look at the "dim" argument of torch.nn.functional.softmax to figure out how to do this.
         """
         B, T, C = input.size()
-
+ 
         # *** BEGIN YOUR CODE HERE ***
-
+        q = self.q_layer(input)
+        k = self.k_layer(input)
+        v = self.v_layer(input)
+ 
+        k_trans = movedim(k, 1, 2)
+        
+        dot_prod = matmul(q, k_trans) / (self.layer_size ** 0.5)
+ 
+        dot_prod = dot_prod.unsqueeze(0)
+        masked = dot_prod.masked_fill(self.mask[:, :, :T, :T] == 0, float('-inf'))[0]
+ 
+        weights = softmax(masked, dim=-1)
+ 
+        return matmul(weights, v)
         # *** END YOUR CODE HERE ***
